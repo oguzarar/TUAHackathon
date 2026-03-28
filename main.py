@@ -25,14 +25,16 @@ from typing import Any
 
 from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from database import (
     create_database, get_db,
     NoaaMeasurement, CmeEvent, ThreatHistory,
-    KpIndex, SolarFlare
+    KpIndex, SolarFlare, NotificationLog
 )
-from veri_motoru import full_analysis, already_alerted_cme
+from veri_motoru import full_analysis
+from notifications import check_all_notifications
 
 # ── Connection Manager (WebSocket) ──────────────────────
 class ConnectionManager:
@@ -73,14 +75,15 @@ async def periodic_scan():
             result = await asyncio.to_thread(full_analysis)
             latest_analysis = result
 
-            # Save to DB (also blocking I/O)
-            def _db_save():
+            # Save to DB + check notifications (also blocking I/O)
+            def _db_save_and_notify():
                 db = next(get_db())
                 try:
                     _save_to_db(db, result)
+                    check_all_notifications(db, result)
                 finally:
                     db.close()
-            await asyncio.to_thread(_db_save)
+            await asyncio.to_thread(_db_save_and_notify)
 
             # Broadcast to WebSocket clients
             await connection_manager.broadcast(result)
@@ -154,18 +157,19 @@ def _save_to_db(db: Session, result: dict):
                 level      = flr.get("level")
             ))
 
-    # Combined threat record
+    # Combined threat record — uses the weighted result from full_analysis()
+    level_order = ["SAFE","UNKNOWN","LOW","MEDIUM","HIGH","CRITICAL"]
     db.add(ThreatHistory(
         noaa_level  = result.get("noaa", {}).get("level", "UNKNOWN"),
         cme_level   = max(
-            (c["level"] for c in cme_list if c.get("earth_target")),
-            key=lambda s: ["SAFE","UNKNOWN","LOW","MEDIUM","HIGH","CRITICAL"].index(s),
+            (c["level"] for c in cme_list),
+            key=lambda s: level_order.index(s) if s in level_order else 0,
             default="SAFE"
         ),
         kp_level    = kp.get("level", "SAFE"),
         flare_level = max(
             (f["level"] for f in flr_list),
-            key=lambda s: ["SAFE","UNKNOWN","LOW","MEDIUM","HIGH","CRITICAL"].index(s),
+            key=lambda s: level_order.index(s) if s in level_order else 0,
             default="SAFE"
         ),
         final_level = result.get("final_level", "SAFE"),
@@ -182,13 +186,14 @@ async def lifespan(app: FastAPI):
     global latest_analysis
     try:
         latest_analysis = await asyncio.to_thread(full_analysis)
-        def _db_save():
+        def _db_save_and_notify():
             db = next(get_db())
             try:
                 _save_to_db(db, latest_analysis)
+                check_all_notifications(db, latest_analysis)
             finally:
                 db.close()
-        await asyncio.to_thread(_db_save)
+        await asyncio.to_thread(_db_save_and_notify)
         print(f"[Startup OK] {latest_analysis.get('timestamp', '?')} — level: {latest_analysis.get('final_level')}")
     except Exception as e:
         import traceback
@@ -365,3 +370,34 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         connection_manager.disconnect(websocket)
+
+
+@app.get("/history/notifications", tags=["History"])
+def notification_history(
+    limit: int = Query(default=20, le=100),
+    db: Session = Depends(get_db)
+):
+    """Returns past notification logs."""
+    records = (
+        db.query(NotificationLog)
+        .order_by(NotificationLog.sent_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "time":     k.sent_at.strftime("%d.%m.%Y %H:%M"),
+            "tier":     k.tier,
+            "event_id": k.event_id,
+            "channel":  k.channel,
+            "success":  k.success,
+            "message":  k.message,
+        }
+        for k in records
+    ]
+
+
+# ── Static Frontend (MUST BE LAST — catches all /app/* routes) ──
+import os
+if os.path.isdir("frontend"):
+    app.mount("/app", StaticFiles(directory="frontend", html=True), name="frontend")

@@ -9,7 +9,7 @@ Tables:
 """
 
 from sqlalchemy import (
-    create_engine, Column, Integer, Float, String,
+    create_engine, event, Column, Integer, Float, String,
     DateTime, Boolean, Text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -19,8 +19,17 @@ DATABASE_URL = "sqlite:///./solar.db"
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False}
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,
 )
+
+# Enable WAL mode for better concurrent access (prevents "database is locked")
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -56,7 +65,7 @@ class CmeEvent(Base):
     alignment         = Column(String(20), nullable=True)   # DIRECT / EDGE / FAR
     level             = Column(String(20), default="LOW")
     earth_target      = Column(Boolean, default=False)
-    estimated_arrival = Column(String(50), nullable=True)   # TRT format
+    estimated_arrival = Column(String(50), nullable=True)   # TSİ format
     l1_delay          = Column(String(30), nullable=True)
     targets           = Column(Text, nullable=True)         # comma separated
 
@@ -98,6 +107,19 @@ class ThreatHistory(Base):
     flare_level   = Column(String(20), default="SAFE")
     final_level   = Column(String(20), default="SAFE")
     determiner    = Column(String(30), nullable=True)
+
+
+# ── Table 6: Notification Log ────────────────────────────
+class NotificationLog(Base):
+    __tablename__ = "notification_log"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    sent_at     = Column(DateTime, default=datetime.utcnow, index=True)
+    event_id    = Column(String(100), index=True)   # CME ID or "noaa_spike_20260328"
+    tier        = Column(Integer)                     # 1, 2, 3, 4
+    channel     = Column(String(30), default="telegram")
+    message     = Column(Text, nullable=True)
+    success     = Column(Boolean, default=True)
 
 
 def create_database():
