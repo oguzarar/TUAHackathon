@@ -3,6 +3,8 @@ Database Models — SQLite + SQLAlchemy
 Tables:
   - noaa_measurement : Each NOAA reading (Bz, speed, density etc.)
   - cme_event        : Each CME record from NASA
+  - kp_index         : Planetary K-Index records from NOAA
+  - solar_flare      : Solar flare records (X-ray bursts) from NASA
   - threat_history   : Combined threat level after each scan
 """
 
@@ -59,7 +61,32 @@ class CmeEvent(Base):
     targets           = Column(Text, nullable=True)         # comma separated
 
 
-# ── Table 3: Combined Threat History ─────────────────────
+# ── Table 3: NOAA Kp Index ─────────────────────────────
+class KpIndex(Base):
+    __tablename__ = "kp_index"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    record_time = Column(DateTime, default=datetime.utcnow, index=True)
+    kp_value    = Column(Float, nullable=False)
+    time_tag    = Column(String(50), nullable=True)
+    level       = Column(String(20), default="SAFE")
+
+
+# ── Table 4: NASA Solar Flares ─────────────────────────
+class SolarFlare(Base):
+    __tablename__ = "solar_flare"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    record_time = Column(DateTime, default=datetime.utcnow, index=True)
+    flare_id    = Column(String(100), unique=True, index=True)
+    begin_time  = Column(String(50), nullable=True)
+    peak_time   = Column(String(50), nullable=True)
+    end_time    = Column(String(50), nullable=True)
+    class_type  = Column(String(20), nullable=True) # e.g. M2.1, X1.0
+    level       = Column(String(20), default="LOW")
+
+
+# ── Table 5: Combined Threat History ─────────────────────
 class ThreatHistory(Base):
     __tablename__ = "threat_history"
 
@@ -67,6 +94,8 @@ class ThreatHistory(Base):
     record_time   = Column(DateTime, default=datetime.utcnow, index=True)
     noaa_level    = Column(String(20), default="SAFE")
     cme_level     = Column(String(20), default="SAFE")
+    kp_level      = Column(String(20), default="SAFE")
+    flare_level   = Column(String(20), default="SAFE")
     final_level   = Column(String(20), default="SAFE")
     determiner    = Column(String(30), nullable=True)
 

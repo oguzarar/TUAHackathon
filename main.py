@@ -5,7 +5,7 @@
 ============================================================
 Endpoints:
   GET  /               → Health check
-  GET  /status         → Live NOAA + NASA analysis
+  GET  /status         → Live NOAA + NASA analysis + Flares + Kp
   GET  /history        → Past N threat history records
   GET  /history/noaa   → Past NOAA measurement history
   GET  /history/cme    → Past CME event history
@@ -29,7 +29,8 @@ from sqlalchemy.orm import Session
 
 from database import (
     create_database, get_db,
-    NoaaMeasurement, CmeEvent, ThreatHistory
+    NoaaMeasurement, CmeEvent, ThreatHistory,
+    KpIndex, SolarFlare
 )
 from veri_motoru import full_analysis, already_alerted_cme
 
@@ -68,29 +69,38 @@ async def periodic_scan():
     while True:
         global latest_analysis
         try:
-            result = full_analysis()
+            # Run blocking HTTP calls in a thread so the event loop stays alive
+            result = await asyncio.to_thread(full_analysis)
             latest_analysis = result
 
-            # Save to DB
-            db = next(get_db())
-            try:
-                _save_to_db(db, result)
-            finally:
-                db.close()
+            # Save to DB (also blocking I/O)
+            def _db_save():
+                db = next(get_db())
+                try:
+                    _save_to_db(db, result)
+                finally:
+                    db.close()
+            await asyncio.to_thread(_db_save)
 
             # Broadcast to WebSocket clients
             await connection_manager.broadcast(result)
 
+            print(f"[Scan OK] {result.get('timestamp', '?')} — level: {result.get('final_level')}")
+
         except Exception as e:
+            import traceback
             print(f"[Scan Error] {e}")
+            traceback.print_exc()
 
         await asyncio.sleep(600)  # 10 minutes
 
 
 def _save_to_db(db: Session, result: dict):
-    """Saves the analysis result into the three tables."""
+    """Saves the analysis result into the tables."""
     noaa = result.get("noaa", {})
     cme_list = result.get("cme_list", [])
+    kp = result.get("kp", {})
+    flr_list = result.get("flr_list", [])
 
     # NOAA record
     if noaa.get("level") != "UNKNOWN":
@@ -123,11 +133,38 @@ def _save_to_db(db: Session, result: dict):
                 targets           = cme.get("targets"),
             ))
 
+    # KP Index Record
+    if kp and kp.get("level") != "UNKNOWN":
+        db.add(KpIndex(
+            kp_value = kp.get("kp_value", 0),
+            time_tag = kp.get("time_tag"),
+            level    = kp.get("level")
+        ))
+        
+    # Solar Flares Record
+    for flr in flr_list:
+        existing = db.query(SolarFlare).filter_by(flare_id=flr["flare_id"]).first()
+        if not existing:
+            db.add(SolarFlare(
+                flare_id   = flr["flare_id"],
+                begin_time = flr.get("begin_time"),
+                peak_time  = flr.get("peak_time"),
+                end_time   = flr.get("end_time"),
+                class_type = flr.get("class_type"),
+                level      = flr.get("level")
+            ))
+
     # Combined threat record
     db.add(ThreatHistory(
         noaa_level  = result.get("noaa", {}).get("level", "UNKNOWN"),
         cme_level   = max(
             (c["level"] for c in cme_list if c.get("earth_target")),
+            key=lambda s: ["SAFE","UNKNOWN","LOW","MEDIUM","HIGH","CRITICAL"].index(s),
+            default="SAFE"
+        ),
+        kp_level    = kp.get("level", "SAFE"),
+        flare_level = max(
+            (f["level"] for f in flr_list),
             key=lambda s: ["SAFE","UNKNOWN","LOW","MEDIUM","HIGH","CRITICAL"].index(s),
             default="SAFE"
         ),
@@ -141,17 +178,22 @@ def _save_to_db(db: Session, result: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_database()
-    # Initial scan
+    # Initial scan — run in thread so startup doesn't block
     global latest_analysis
     try:
-        latest_analysis = full_analysis()
-        db = next(get_db())
-        try:
-            _save_to_db(db, latest_analysis)
-        finally:
-            db.close()
+        latest_analysis = await asyncio.to_thread(full_analysis)
+        def _db_save():
+            db = next(get_db())
+            try:
+                _save_to_db(db, latest_analysis)
+            finally:
+                db.close()
+        await asyncio.to_thread(_db_save)
+        print(f"[Startup OK] {latest_analysis.get('timestamp', '?')} — level: {latest_analysis.get('final_level')}")
     except Exception as e:
+        import traceback
         print(f"[Startup Scan Error] {e}")
+        traceback.print_exc()
     # Start background loop
     task = asyncio.create_task(periodic_scan())
     yield
@@ -161,8 +203,8 @@ async def lifespan(app: FastAPI):
 # ── FastAPI App ────────────────────────────────────
 app = FastAPI(
     title="ASA Team — Solar Storm API",
-    description="Real-time space weather based on NASA DONKI + NOAA DSCOVR",
-    version="2.0.0",
+    description="Real-time space weather with NASA (CME, Flare) + NOAA (DSCOVR, Kp)",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -183,7 +225,7 @@ def health_check():
     """Checks if API is running."""
     return {
         "status": "online",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "time": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
     }
 
@@ -226,6 +268,8 @@ def threat_history(
             "time":        k.record_time.strftime("%d.%m.%Y %H:%M"),
             "noaa_level":  k.noaa_level,
             "cme_level":   k.cme_level,
+            "kp_level":    k.kp_level,
+            "flare_level": k.flare_level,
             "final_level": k.final_level,
             "determiner":  k.determiner,
         }
@@ -299,6 +343,8 @@ def statistics(db: Session = Depends(get_db)):
         "noaa_count":        db.query(NoaaMeasurement).count(),
         "cme_count":         db.query(CmeEvent).count(),
         "threat_count":      db.query(ThreatHistory).count(),
+        "kp_count":          db.query(KpIndex).count(),
+        "flr_count":         db.query(SolarFlare).count(),
         "last_update":       latest_analysis.get("timestamp", "—"),
         "active_ws_clients": len(connection_manager.active),
     }

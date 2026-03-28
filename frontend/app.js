@@ -18,7 +18,7 @@ const i18n = {
         timeToReach: "Time to reach Earth",
         chartTitle: "24h Bz and Speed History",
         cmeTitle: "Detected CMEs (Last 72h)",
-        checkingData: "Checking CME Data...",
+        checkingData: "Checking Data...",
         cmeEmpty: "No Coronal Mass Ejection (CME) recorded in the last 72 hours.",
         cmeDetailsTitle: "CME Details",
         solarSource: "Solar Source Location",
@@ -26,6 +26,14 @@ const i18n = {
         alertTitle: "NEW THREAT LEVEL DETECTED",
         acknowledge: "Acknowledge",
         alertMsgFull: "Space Weather Threat Level is at {LEVEL}! Please check your systems.",
+        kpTitle: "Geomagnetic Kp-Index",
+        flareTitle: "Solar Flares (Last 72h)",
+        flareDetailsTitle: "Solar Flare Details",
+        flrEmpty: "No significant solar flares detected.",
+        detailFlareClass: "Flare Class",
+        detailBeginTime: "Begin Time",
+        detailPeakTime: "Peak Time",
+        detailEndTime: "End Time",
         
         // Values & States
         levelSAFE: "SAFE",
@@ -79,7 +87,7 @@ const i18n = {
         timeToReach: "Dünyaya Ulaşma Süresi",
         chartTitle: "Son 24s Bz ve Hız Geçmişi",
         cmeTitle: "Tespit Edilen KKA (Son 72s)",
-        checkingData: "KKA Verileri Kontrol Ediliyor...",
+        checkingData: "Veriler Kontrol Ediliyor...",
         cmeEmpty: "Son 72 saatte kaydedilmiş bir Koronal Kütle Atımı (KKA/CME) tespit edilmedi.",
         cmeDetailsTitle: "CME Detayları",
         solarSource: "Güneş Yüzeyi Çıkış Noktası",
@@ -87,6 +95,14 @@ const i18n = {
         alertTitle: "YENİ TEHDİT SEVİYESİ",
         acknowledge: "Anladım",
         alertMsgFull: "Uzay Hava Durumu Tehdit Seviyesi {LEVEL} aşamasında! Sistemleri kontrol edin.",
+        kpTitle: "Jeomanyetik Kp-İndeksi",
+        flareTitle: "Güneş Patlamaları (Son 72s)",
+        flareDetailsTitle: "Güneş Patlaması (Flare) Detayları",
+        flrEmpty: "Önemli bir güneş patlaması (Flare) tespit edilmedi.",
+        detailFlareClass: "Patlama Sınıfı",
+        detailBeginTime: "Başlangıç Zamanı",
+        detailPeakTime: "Zirve (Peak) Zamanı",
+        detailEndTime: "Bitiş Zamanı",
 
         levelSAFE: "GÜVENLİ",
         levelLOW: "DÜŞÜK",
@@ -126,7 +142,7 @@ const i18n = {
     }
 };
 
-let currentLang = 'tr'; // Default logic user requested functionality
+let currentLang = 'tr';
 function t(key) { return i18n[currentLang][key] || key; }
 function tLevels(val) { if(!val) return t("unknown"); return t("level" + val) || val; }
 // --- End i18n ---
@@ -141,6 +157,11 @@ const windSpeedEl = document.getElementById("wind-speed");
 const densityEl = document.getElementById("density");
 const l1DelayEl = document.getElementById("l1-delay");
 const cmeListEl = document.getElementById("cme-list");
+const flrListEl = document.getElementById("flr-list");
+
+const kpDisplay = document.getElementById("kp-display");
+const kpMeterBg = document.getElementById("kp-meter-bg");
+const kpStatusText = document.getElementById("kp-status-text");
 
 const modal = document.getElementById("alert-modal");
 const alertMsg = document.getElementById("alert-msg");
@@ -152,9 +173,15 @@ const cmeMarker = document.getElementById("cme-marker");
 const cmeInfoList = document.getElementById("cme-detail-info");
 const cmeDetailTitle = document.getElementById("cme-detail-title");
 
+const flrModal = document.getElementById("flr-detail-modal");
+const closeFlrModalBtn = document.getElementById("close-flr-modal");
+const flrInfoList = document.getElementById("flr-detail-info");
+const flrDetailTitle = document.getElementById("flr-detail-title");
+const flrMarker = document.getElementById("flr-marker");
+
 let chartInstance = null;
 let currentThreatLevel = null;
-let globalDataCache = null; // Store latest data to quickly refresh on lang swap
+let globalDataCache = null;
 
 // Language Toggles
 document.getElementById("lang-en").addEventListener("click", () => setLang('en'));
@@ -165,15 +192,11 @@ function setLang(lang) {
     document.getElementById("lang-en").classList.toggle("active", lang === 'en');
     document.getElementById("lang-tr").classList.toggle("active", lang === 'tr');
     
-    // Update static HTML data-i18n
     document.querySelectorAll('[data-i18n]').forEach(el => {
         el.innerText = t(el.getAttribute('data-i18n'));
     });
     
-    // Refresh dynamic data
-    if (globalDataCache) {
-        updateDashboard(globalDataCache);
-    }
+    if (globalDataCache) updateDashboard(globalDataCache);
 }
 
 // Clock
@@ -190,6 +213,7 @@ setInterval(() => {
 async function init() {
     closeModalBtn.addEventListener('click', () => modal.classList.add('hidden'));
     closeCmeModalBtn.addEventListener('click', () => cmeModal.classList.add('hidden'));
+    closeFlrModalBtn.addEventListener('click', () => flrModal.classList.add('hidden'));
 
     setLang('tr');
 
@@ -215,18 +239,11 @@ async function fetchInitialData() {
 
 function setupWebSocket() {
     const ws = new WebSocket(`${WS_BASE}/ws`);
-    
-    ws.onopen = () => console.log("WebSocket connection established.");
     ws.onmessage = (event) => {
         globalDataCache = JSON.parse(event.data);
-        console.log("Live WebSocket Data:", globalDataCache);
         updateDashboard(globalDataCache);
     };
-    ws.onclose = () => {
-        console.warn("WebSocket closed. Retrying in 5 seconds...");
-        setTimeout(setupWebSocket, 5000);
-    };
-    ws.onerror = (err) => console.error("WebSocket error:", err);
+    ws.onclose = () => setTimeout(setupWebSocket, 5000);
 }
 
 function updateDashboard(data) {
@@ -237,14 +254,9 @@ function updateDashboard(data) {
     const localizedLevel = tLevels(newTarget);
     threatLevelEl.innerText = localizedLevel;
     
-    // Clear and set classes
     const classMap = {
-        "SAFE": "level-safe",
-        "LOW": "level-low",
-        "MEDIUM": "level-medium",
-        "HIGH": "level-high",
-        "CRITICAL": "level-critical",
-        "UNKNOWN": "level-unknown"
+        "SAFE": "level-safe", "LOW": "level-low", "MEDIUM": "level-medium",
+        "HIGH": "level-high", "CRITICAL": "level-critical", "UNKNOWN": "level-unknown"
     };
 
     threatLevelEl.className = `threat-level ${classMap[newTarget] || 'level-unknown'}`;
@@ -257,34 +269,70 @@ function updateDashboard(data) {
     }
     currentThreatLevel = newTarget;
 
-    // 2. NOAA Live Data Panel Update
+    // 2. NOAA Live Data Panel
     const noaa = data.noaa || {};
-    
     bzValueEl.innerText = (noaa.bz_gsm !== null && noaa.bz_gsm !== undefined) ? noaa.bz_gsm : "--";
     bzValueEl.className = (noaa.bz_gsm < -5) ? "value status-negative" : "value status-neutral";
-
     windSpeedEl.innerText = (noaa.speed) ? noaa.speed : "--";
     windSpeedEl.className = (noaa.speed > 600) ? "value status-negative" : "value status-neutral";
-
     densityEl.innerText = (noaa.density) ? noaa.density : "--";
     densityEl.className = (noaa.density > 15) ? "value status-negative" : "value status-neutral";
-
     l1DelayEl.innerText = (noaa.l1_delay_str) ? noaa.l1_delay_str : "--";
 
-    // 3. NASA CME List
-    let cmeList = data.cme_list || [];
+    // 3. Kp-Index Panel
+    const kpData = data.kp || {};
+    const kpVal = kpData.kp_value !== undefined ? kpData.kp_value : 0;
+    const kpLevel = kpData.level || "UNKNOWN";
     
-    // Sort array so newest is at the top (descending by cme_id since it contains date like 2024-05-10)
+    kpDisplay.innerText = kpVal.toFixed(1);
+    kpStatusText.innerText = tLevels(kpLevel);
+    kpStatusText.className = `kp-status-text ${classMap[kpLevel]}`;
+    
+    // Gauge Color Gradient
+    let gaugeColor = "rgba(16, 185, 129, 0.4)"; // Safe
+    if(kpVal >= 7) gaugeColor = "rgba(239, 68, 68, 0.6)"; // Crit
+    else if(kpVal >= 5) gaugeColor = "rgba(249, 115, 22, 0.5)"; // High
+    else if(kpVal >= 4) gaugeColor = "rgba(245, 158, 11, 0.4)"; // Med
+    else if(kpVal >= 3) gaugeColor = "rgba(59, 130, 246, 0.4)"; // Low
+    
+    kpMeterBg.style.background = `radial-gradient(circle at bottom, ${gaugeColor} 0%, rgba(15, 23, 42, 1) 100%)`;
+
+    // 4. NASA Flares Panel
+    let flrList = data.flr_list || [];
+    // Sort so X-class and most recent are prioritized. 
+    // Simply descending by begin_time or flare_id works for recent.
+    flrList.sort((a, b) => b.flare_id.localeCompare(a.flare_id));
+    
+    flrListEl.innerHTML = "";
+    if (flrList.length === 0) {
+        flrListEl.innerHTML = `<p class="empty-cme">${t('flrEmpty')}</p>`;
+    } else {
+        flrList.forEach(flr => {
+            const baseClass = flr.class_type.charAt(0);
+            const item = document.createElement("div");
+            item.className = "flr-item";
+            item.onclick = () => showFlrDetails(flr);
+            item.innerHTML = `
+                <div class="flr-info">
+                    <span class="flr-id">${flr.flare_id}</span>
+                    <span class="flr-time">${flr.begin_time}</span>
+                </div>
+                <div class="flr-class ${baseClass}">${flr.class_type}</div>
+            `;
+            flrListEl.appendChild(item);
+        });
+    }
+
+    // 5. NASA CME List
+    let cmeList = data.cme_list || [];
     cmeList.sort((a, b) => b.cme_id.localeCompare(a.cme_id));
 
     cmeListEl.innerHTML = "";
-    
     if (cmeList.length === 0) {
         cmeListEl.innerHTML = `<p class="empty-cme">${t('cmeEmpty')}</p>`;
     } else {
         cmeList.forEach(cme => {
             const isEarthTarget = cme.earth_target;
-            
             let htmlTargetClass = isEarthTarget ? "target-earth" : "";
             let htmlTargetText = isEarthTarget 
                 ? `<div class="cme-arrival"><i class="fa-solid fa-earth-americas"></i> ${t('targetEarth')} ${cme.estimated_arrival || t('unknown')}</div>`
@@ -314,7 +362,6 @@ function updateDashboard(data) {
         });
     }
 
-    // Refresh chart dynamically
     updateChart();
 }
 
@@ -322,7 +369,6 @@ function updateDashboard(data) {
 // Chart.js Setup
 async function initChart() {
     const ctx = document.getElementById('historyChart').getContext('2d');
-    
     Chart.defaults.color = '#94a3b8';
     Chart.defaults.font.family = "'Inter', sans-serif";
     
@@ -374,12 +420,11 @@ async function initChart() {
 
 async function updateChart() {
     try {
-        const res = await fetch(`${API_BASE}/history/noaa?limit=30`); // Last 30 points
+        const res = await fetch(`${API_BASE}/history/noaa?limit=30`);
         if (!res.ok) return;
         let data = await res.json();
         
         data = data.reverse();
-
         const labels = data.map(repo => {
             const timeParts = repo.time.split(' ');
             return timeParts[1] || repo.time; 
@@ -391,57 +436,38 @@ async function updateChart() {
         chartInstance.data.datasets[0].data = bzData;
         chartInstance.data.datasets[1].data = speedData;
         chartInstance.update();
-
     } catch (e) {
         console.warn("Chart data fetch error", e);
     }
 }
 
-
-// Start
 document.addEventListener('DOMContentLoaded', init);
 
-// CME Details Logic
+// CME Details
 const colorMap = {
-    "SAFE": "var(--accent-safe)",
-    "LOW": "var(--accent-low)",
-    "MEDIUM": "var(--accent-mid)",
-    "HIGH": "var(--accent-high)",
-    "CRITICAL": "var(--accent-crit)",
-    "UNKNOWN": "var(--accent-unknown)"
+    "SAFE": "var(--accent-safe)", "LOW": "var(--accent-low)", "MEDIUM": "var(--accent-mid)",
+    "HIGH": "var(--accent-high)", "CRITICAL": "var(--accent-crit)", "UNKNOWN": "var(--accent-unknown)"
 };
 
 function showCmeDetails(cme) {
     cmeDetailTitle.innerText = `CME: ${cme.cme_id || t('unknown')}`;
-    
     const lon = parseFloat(cme.longitude);
     const lat = parseFloat(cme.latitude);
     const textColor = colorMap[cme.level] || colorMap["UNKNOWN"];
     
-    // High-contrast marker colors for the sun background
     const markerContrastMap = {
-        "SAFE": "#22c55e",       // Bright Green
-        "LOW": "#3b82f6",        // Bright Blue
-        "MEDIUM": "#a855f7",     // Purple
-        "HIGH": "#000000",       // Black
-        "CRITICAL": "#ffffff",   // White
-        "UNKNOWN": "#64748b"     // Slate
+        "SAFE": "#22c55e", "LOW": "#3b82f6", "MEDIUM": "#a855f7",
+        "HIGH": "#000000", "CRITICAL": "#ffffff", "UNKNOWN": "#64748b"
     };
-    const markerColor = markerContrastMap[cme.level] || markerContrastMap["UNKNOWN"];
-    
-    cmeMarker.style.backgroundColor = markerColor;
+    cmeMarker.style.backgroundColor = markerContrastMap[cme.level] || markerContrastMap["UNKNOWN"];
     cmeMarker.style.border = cme.level === "CRITICAL" ? "3px solid #ef4444" : "3px solid #ffffff";
     cmeMarker.style.boxShadow = "0 0 15px rgba(0,0,0,0.9)";
     
     if (!isNaN(lon) && !isNaN(lat)) {
         let targetTop = 50 - (lat / 90) * 50;
         let targetLeft = 50 + (lon / 90) * 50;
-        
-        if (targetLeft < 0) targetLeft = 0;
-        if (targetLeft > 100) targetLeft = 100;
-        if (targetTop < 0) targetTop = 0;
-        if (targetTop > 100) targetTop = 100;
-        
+        targetLeft = Math.max(0, Math.min(100, targetLeft));
+        targetTop = Math.max(0, Math.min(100, targetTop));
         cmeMarker.style.top = `${targetTop}%`;
         cmeMarker.style.left = `${targetLeft}%`;
         cmeMarker.style.display = 'block';
@@ -468,4 +494,51 @@ function showCmeDetails(cme) {
     `).join('');
     
     cmeModal.classList.remove("hidden");
+}
+
+function showFlrDetails(flr) {
+    flrDetailTitle.innerText = `${t('flareDetailsTitle')}: ${flr.flare_id || t('unknown')}`;
+    const textColor = colorMap[flr.level] || colorMap["UNKNOWN"];
+    
+    // Position marker
+    const lat = parseFloat(flr.latitude);
+    const lon = parseFloat(flr.longitude);
+    
+    const markerContrastMap = {
+        "SAFE": "#22c55e", "LOW": "#3b82f6", "MEDIUM": "#a855f7",
+        "HIGH": "#000000", "CRITICAL": "#ffffff", "UNKNOWN": "#64748b"
+    };
+    flrMarker.style.backgroundColor = markerContrastMap[flr.level] || markerContrastMap["UNKNOWN"];
+    flrMarker.style.border = flr.level === "CRITICAL" ? "3px solid #ef4444" : "3px solid #ffffff";
+    flrMarker.style.boxShadow = "0 0 15px rgba(0,0,0,0.9)";
+    
+    if (!isNaN(lat) && !isNaN(lon)) {
+        let targetTop = 50 - (lat / 90) * 50;
+        let targetLeft = 50 + (lon / 90) * 50;
+        targetTop = Math.max(0, Math.min(100, targetTop));
+        targetLeft = Math.max(0, Math.min(100, targetLeft));
+        flrMarker.style.top = `${targetTop}%`;
+        flrMarker.style.left = `${targetLeft}%`;
+        flrMarker.style.display = 'block';
+    } else {
+        flrMarker.style.display = 'none';
+    }
+    
+    const fields = [
+        { label: t("detailThreatLevel"), value: `<span style="color: ${textColor}; font-weight:800">${tLevels(flr.level)}</span>` },
+        { label: t("detailFlareClass"), value: flr.class_type ? `<strong class="flr-class ${flr.class_type.charAt(0)}" style="font-size:1.1rem">${flr.class_type}</strong>` : t('noData') },
+        { label: t("detailCoords"), value: (!isNaN(lat) && !isNaN(lon)) ? `${t('latText')}: ${lat.toFixed(1)}°, ${t('lonText')}: ${lon.toFixed(1)}° (${flr.source_location})` : t('noData') },
+        { label: t("detailBeginTime"), value: flr.begin_time || t('noData') },
+        { label: t("detailPeakTime"), value: flr.peak_time || t('noData') },
+        { label: t("detailEndTime"), value: flr.end_time || t('noData') }
+    ];
+    
+    flrInfoList.innerHTML = fields.map(f => `
+        <div class="info-row">
+            <span class="info-label">${f.label}</span>
+            <span class="info-value">${f.value}</span>
+        </div>
+    `).join('');
+    
+    flrModal.classList.remove("hidden");
 }

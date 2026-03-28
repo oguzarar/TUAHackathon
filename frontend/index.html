@@ -85,24 +85,53 @@
         </section>
 
         <div class="main-columns">
-            <!-- Chart Panel -->
-            <section class="glass-panel chart-panel">
-                <div class="panel-header">
+            <!-- Left Column: Chart Panel -->
+            <section class="glass-panel chart-panel" style="display: flex; flex-direction: column; height: 100%;">
+                <div class="panel-header" style="flex-shrink: 0;">
                     <h3><i class="fa-solid fa-chart-line"></i> <span data-i18n="chartTitle">24h Bz and Speed History</span></h3>
                     <div class="badge noaa-badge">NOAA DSCOVR</div>
                 </div>
-                <div class="chart-container">
+                <div class="chart-container" style="flex-grow: 1; height: 0; min-height: 480px;">
                     <canvas id="historyChart"></canvas>
                 </div>
             </section>
 
-            <!-- NASA CME Panel -->
-            <section class="glass-panel cme-panel">
-                <div class="panel-header">
+            <!-- Middle Column: Kp & Flares -->
+            <div style="display: flex; flex-direction: column; gap: 20px; height: 100%; min-height: 0;">
+                <!-- NOAA Kp Panel -->
+                <section class="glass-panel kp-panel">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-globe"></i> <span data-i18n="kpTitle">Geomagnetic Kp-Index</span></h3>
+                        <div class="badge noaa-badge">NOAA SWPC</div>
+                    </div>
+                    <div class="kp-gauge-container">
+                        <div class="kp-meter" id="kp-meter-bg">
+                            <div class="kp-value-large" id="kp-display">--</div>
+                            <div class="kp-scale"></div>
+                        </div>
+                        <div class="kp-status-text" id="kp-status-text" data-i18n="loading">Loading...</div>
+                    </div>
+                </section>
+                
+                <!-- NASA Flares Panel -->
+                <section class="glass-panel flr-panel" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+                    <div class="panel-header" style="flex-shrink: 0;">
+                        <h3><i class="fa-solid fa-sun" style="color:var(--accent-mid)"></i> <span data-i18n="flareTitle">Solar Flares (Last 72h)</span></h3>
+                        <div class="badge nasa-badge">NASA DONKI</div>
+                    </div>
+                    <div class="flr-list" id="flr-list" style="flex-grow: 1; flex-basis: 0; min-height: 0; overflow-y: auto;">
+                        <p class="loading-text" data-i18n="checkingData">Checking Data...</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: NASA CME Panel -->
+            <section class="glass-panel cme-panel" style="display: flex; flex-direction: column; height: 100%; min-height: 0;">
+                <div class="panel-header" style="flex-shrink: 0;">
                     <h3><i class="fa-solid fa-meteor"></i> <span data-i18n="cmeTitle">Detected CMEs (Last 72h)</span></h3>
                     <div class="badge nasa-badge">NASA DONKI</div>
                 </div>
-                <div class="cme-list" id="cme-list">
+                <div class="cme-list" id="cme-list" style="flex-grow: 1; flex-basis: 0; min-height: 0; overflow-y: auto;">
                     <p class="loading-text" data-i18n="checkingData">Checking CME Data...</p>
                 </div>
             </section>
@@ -141,6 +170,33 @@
 
                 <!-- Right Details List -->
                 <div class="cme-info-list" id="cme-detail-info">
+                    <!-- JS populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flare Details Modal -->
+    <div id="flr-detail-modal" class="modal hidden cme-detail-modal">
+        <div class="modal-content glass-panel large-modal">
+            <button id="close-flr-modal" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="flr-detail-title" data-i18n="flareDetailsTitle">Flare Details</h2>
+            <div class="cme-detail-layout">
+                <!-- Left Sun Visualizer -->
+                <div class="sun-visual-panel">
+                    <h3 data-i18n="solarSource">Solar Source Location</h3>
+                    <div class="sun-container">
+                        <div id="flr-marker" class="cme-marker">
+                            <div class="marker-pulse"></div>
+                        </div>
+                        <div class="sun-equator"></div>
+                        <div class="sun-meridian"></div>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 5px;" data-i18n="earthFacingDisk">* Earth-facing disk / ±90° longitude</p>
+                </div>
+
+                <!-- Right Details List -->
+                <div class="cme-info-list" id="flr-detail-info">
                     <!-- JS populated -->
                 </div>
             </div>

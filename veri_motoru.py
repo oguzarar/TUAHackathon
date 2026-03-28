@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 NASA_API_KEY    = os.environ.get("NASA_API_KEY", "DEMO_KEY")
 NOAA_MAG_URL    = "https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json"
 NOAA_PLASMA_URL = "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json"
+NOAA_KP_URL     = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 NASA_CME_URL    = "https://api.nasa.gov/DONKI/CME"
+NASA_FLR_URL    = "https://api.nasa.gov/DONKI/FLR"
 STRATEGIC_ZONES = ["EARTH", "L1", "STEREO A", "DSCOVR", "ACE"]
 L1_DISTANCE_KM  = 1_500_000
 
@@ -27,6 +29,8 @@ LEVEL_ORDER = ["SAFE", "UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
 # ═══════════════════════════════════════════════════════════
 
 def utc_to_local(utc_str: str) -> str:
+    if not utc_str:
+        return ""
     try:
         dt = datetime.fromisoformat(utc_str.replace("Z", ""))
         return (dt + timedelta(hours=3)).strftime("%d %B %H:%M Local")
@@ -50,7 +54,7 @@ def l1_delay_str(speed: float) -> str:
 
 
 # ═══════════════════════════════════════════════════════════
-#  NOAA
+#  NOAA (MAG/PLASMA & KP)
 # ═══════════════════════════════════════════════════════════
 
 def fetch_noaa_data(url: str) -> list:
@@ -142,8 +146,44 @@ def analyze_noaa() -> dict:
     }
 
 
+def analyze_kp_index() -> dict:
+    """
+    Fetch the latest Planetary K-Index from NOAA JSON.
+    """
+    try:
+        r = requests.get(NOAA_KP_URL, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        if len(data) > 1:
+            # First row is headers, get the very last row
+            latest_row = data[-1]
+            time_tag = latest_row[0]
+            kp_val_str = latest_row[1]
+            kp = float(kp_val_str)
+            
+            if kp >= 7:
+                level = "CRITICAL"
+            elif kp >= 5:
+                level = "HIGH"
+            elif kp == 4:
+                level = "MEDIUM"
+            elif kp >= 3:
+                level = "LOW"
+            else:
+                level = "SAFE"
+                
+            return {
+                "kp_value": kp,
+                "time_tag": utc_to_local(time_tag),
+                "level": level
+            }
+    except Exception as e:
+        print("[Kp-Index Error]", str(e))
+    return {"kp_value": 0, "time_tag": "—", "level": "UNKNOWN"}
+
+
 # ═══════════════════════════════════════════════════════════
-#  NASA CME
+#  NASA DONKI (CME & FLARES)
 # ═══════════════════════════════════════════════════════════
 
 def calculate_cme_alignment(lon, lat) -> tuple[str, str]:
@@ -171,9 +211,10 @@ def analyze_nasa_cme() -> list[dict]:
 
     r = requests.get(NASA_CME_URL, params=params, timeout=15)
     if r.status_code == 429:
-        time.sleep(60)
+        time.sleep(10)
         r = requests.get(NASA_CME_URL, params=params, timeout=15)
-    r.raise_for_status()
+    if r.status_code != 200:
+        return []
 
     results = []
     for cme in (r.json() or []):
@@ -235,17 +276,79 @@ def analyze_nasa_cme() -> list[dict]:
     return results
 
 
+def analyze_nasa_flares() -> list[dict]:
+    """
+    Fetch and analyze Solar Flares in the last 72 hours.
+    Returns list of dicts.
+    """
+    now       = datetime.now(timezone.utc)
+    today     = now.strftime("%Y-%m-%d")
+    past_date = (now - timedelta(days=3)).strftime("%Y-%m-%d")
+    params    = {"api_key": NASA_API_KEY, "startDate": past_date, "endDate": today}
+    
+    r = requests.get(NASA_FLR_URL, params=params, timeout=15)
+    if r.status_code == 429:
+        time.sleep(10)
+        r = requests.get(NASA_FLR_URL, params=params, timeout=15)
+    if r.status_code != 200:
+        return []
+    
+    results = []
+    # FLR data
+    for flr in (r.json() or []):
+        flr_id = flr.get("flrID", "")
+        # e.g., "M2.1", "X1.0", "C9.9"
+        class_type = flr.get("classType", "")
+        
+        # Threat level assignment based on flare class
+        # X: Critical, M: High, C: Medium/Low, A/B: Safe
+        if "X" in class_type:
+            level = "CRITICAL"
+        elif "M" in class_type:
+            level = "HIGH"
+        elif "C" in class_type:
+            level = "MEDIUM"
+        else:
+            level = "SAFE"
+            
+        loc = flr.get("sourceLocation", "")
+        lat = None
+        lon = None
+        if loc:
+            import re
+            m = re.match(r'([NS])(\d+)([EW])(\d+)', loc.upper())
+            if m:
+                lat_dir, lat_val, lon_dir, lon_val = m.groups()
+                lat = float(lat_val) if lat_dir == 'N' else -float(lat_val)
+                lon = float(lon_val) if lon_dir == 'W' else -float(lon_val)
+                
+        results.append({
+            "flare_id": flr_id,
+            "class_type": class_type,
+            "begin_time": utc_to_local(flr.get("beginTime")),
+            "peak_time": utc_to_local(flr.get("peakTime")),
+            "end_time": utc_to_local(flr.get("endTime")),
+            "level": level,
+            "source_location": loc,
+            "latitude": lat,
+            "longitude": lon
+        })
+    return results
+
+
 # ═══════════════════════════════════════════════════════════
 #  COMBINED ANALYSIS
 # ═══════════════════════════════════════════════════════════
 
 def full_analysis() -> dict:
     """
-    Fetches both NOAA and NASA data and returns a combined result.
-    FastAPI endpoints and background task use this function.
+    Fetches NOAA and NASA data, creates a combined result,
+    including Solar Flares and Kp-Index.
     """
     noaa     = {}
+    kp       = {}
     cme_list = []
+    flr_list = []
 
     try:
         noaa = analyze_noaa()
@@ -253,28 +356,58 @@ def full_analysis() -> dict:
         noaa = {"level": "UNKNOWN", "message": str(e)}
 
     try:
-        cme_list = analyze_nasa_cme()
+        kp = analyze_kp_index()
     except Exception as e:
+        kp = {"level": "UNKNOWN"}
+
+    try:
+        cme_list = analyze_nasa_cme()
+    except Exception:
         cme_list = []
 
-    noaa_level  = noaa.get("level", "UNKNOWN")
+    try:
+        flr_list = analyze_nasa_flares()
+    except Exception:
+        flr_list = []
+
+    # Final logic determines the highest threat
+    noaa_level = noaa.get("level", "UNKNOWN")
+    kp_level   = kp.get("level", "UNKNOWN")
+    
     highest_cme = "SAFE"
     for cme in cme_list:
-        if cme["earth_target"] and \
-           LEVEL_ORDER.index(cme["level"]) > LEVEL_ORDER.index(highest_cme):
+        if cme["earth_target"] and LEVEL_ORDER.index(cme["level"]) > LEVEL_ORDER.index(highest_cme):
             highest_cme = cme["level"]
+            
+    highest_flr = "SAFE"
+    for flr in flr_list:
+        if LEVEL_ORDER.index(flr["level"]) > LEVEL_ORDER.index(highest_flr):
+            highest_flr = flr["level"]
 
-    if LEVEL_ORDER.index(noaa_level) >= LEVEL_ORDER.index(highest_cme):
-        final_level = noaa_level
-        determiner  = "NOAA live data"
+    # Compare all levels safely
+    valid_levels = []
+    for source, lvl in [("NOAA live data", noaa_level), 
+                        ("NOAA Kp-Index", kp_level), 
+                        ("NASA CME prediction", highest_cme), 
+                        ("NASA Solar Flare", highest_flr)]:
+        if lvl in LEVEL_ORDER:
+            valid_levels.append((source, lvl))
+            
+    if not valid_levels:
+        final_level = "UNKNOWN"
+        determiner  = "System Error"
     else:
-        final_level = highest_cme
-        determiner  = "NASA CME prediction"
+        # Find max level using LEVEL_ORDER index
+        best_source, best_level = max(valid_levels, key=lambda item: LEVEL_ORDER.index(item[1]))
+        final_level = best_level
+        determiner  = best_source
 
     return {
         "timestamp":   datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
         "final_level": final_level,
         "determiner":  determiner,
         "noaa":        noaa,
+        "kp":          kp,
         "cme_list":    cme_list,
+        "flr_list":    flr_list,
     }
