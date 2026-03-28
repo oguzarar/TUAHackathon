@@ -401,7 +401,6 @@ def notification_history(
         for k in records
     ]
 
-
 # ── Static Frontend (MUST BE LAST — catches all /app/* routes) ──
 import os
 if os.path.isdir("frontend"):
