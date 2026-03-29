@@ -44,6 +44,50 @@
             <h2 class="threat-title" data-i18n="finalThreat">Final Threat Level</h2>
             <div class="threat-level" id="final-level" data-i18n="loading">LOADING</div>
             <p class="threat-desc" id="threat-determiner" data-i18n="systemStarting">System Starting...</p>
+            
+            <!-- Infrastructure Impact Section -->
+            <div class="infrastructure-impacts">
+                <div class="impact-card" id="impact-sat">
+                    <div class="impact-icon"><i class="fa-solid fa-satellite"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impSat">Satellites</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-sat-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-sat-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-grid">
+                    <div class="impact-icon"><i class="fa-solid fa-plug-circle-bolt"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impGrid">Power Grid</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-grid-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-grid-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-radio">
+                    <div class="impact-icon"><i class="fa-solid fa-tower-cell"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impRadio">Comms (HF)</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-radio-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-radio-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-gps">
+                    <div class="impact-icon"><i class="fa-solid fa-location-crosshairs"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impGps">Navigation</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-gps-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-gps-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Live Data (NOAA) -->

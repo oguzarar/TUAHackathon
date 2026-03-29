@@ -26,9 +26,9 @@ SOURCE_WEIGHTS = {
     "NASA CME prediction": 0.25, # Model/prediction based
     "NASA Solar Flare":  0.15,   # Indirect effect
 }
-LEVEL_SCORES = {"SAFE": 0, "UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+LEVEL_SCORES = {"SAFE": 0, "UNKNOWN": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4, "EXTREME": 5}
 
-LEVEL_ORDER = ["SAFE", "UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+LEVEL_ORDER = ["SAFE", "UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL", "EXTREME"]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -527,7 +527,9 @@ def full_analysis() -> dict:
             top_source = source
 
     # Map weighted score back to level
-    if weighted_score >= 3.2:
+    if weighted_score >= 3.8:
+        final_level = "EXTREME"
+    elif weighted_score >= 3.2:
         final_level = "CRITICAL"
     elif weighted_score >= 2.2:
         final_level = "HIGH"

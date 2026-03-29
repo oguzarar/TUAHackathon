@@ -41,6 +41,7 @@ const i18n = {
         levelMEDIUM: "MEDIUM",
         levelHIGH: "HIGH",
         levelCRITICAL: "CRITICAL",
+        levelEXTREME: "EXTREME",
         levelUNKNOWN: "UNKNOWN",
 
         alignDIRECT: "DIRECT",
@@ -70,7 +71,17 @@ const i18n = {
         connError: "CONNECTION ERROR",
         connErrorDesc: "Backend server unreachable. Make sure FastAPI is running.",
         latText: "Lat",
-        lonText: "Lon"
+        lonText: "Longitude",
+        lblNow: "NOW (Kp):",
+        lblFuture: "PREDICTED (ASA):",
+        
+        impSat: "Satellites", impGrid: "Power Grid", impRadio: "Comms (HF)", impGps: "Navigation",
+        impact_sat_SAFE: "Optimal conditions", impact_grid_SAFE: "No impact detected", impact_radio_SAFE: "Stable bands", impact_gps_SAFE: "Precision nominal",
+        impact_sat_LOW: "Minor charging", impact_grid_LOW: "No impact detected", impact_radio_LOW: "Slight HF fade", impact_gps_LOW: "Precision nominal",
+        impact_sat_MEDIUM: "Surface charging req.", impact_grid_MEDIUM: "Minor grid fluct.", impact_radio_MEDIUM: "HF fade in poles", impact_gps_MEDIUM: "Meter-level errors",
+        impact_sat_HIGH: "Warning: Charging risk", impact_grid_HIGH: "Voltage alarms", impact_radio_HIGH: "Blackout in poles", impact_gps_HIGH: "Tens of meters errors",
+        impact_sat_CRITICAL: "Safe Mode Required", impact_grid_CRITICAL: "Grid collapse risk", impact_radio_CRITICAL: "Global HF blackout", impact_gps_CRITICAL: "Navigation failure",
+        impact_sat_EXTREME: "EVASIVE MANEUVERS", impact_grid_EXTREME: "CATASTROPHIC COLLAPSE", impact_radio_EXTREME: "TOTAL BLACKOUT", impact_gps_EXTREME: "TOTAL SIGNAL LOSS",
     },
     tr: {
         appTitle: "ASA Uzay Hava Durumu",
@@ -109,6 +120,7 @@ const i18n = {
         levelMEDIUM: "ORTA",
         levelHIGH: "YÜKSEK",
         levelCRITICAL: "KRİTİK",
+        levelEXTREME: "EKSTREM",
         levelUNKNOWN: "BİLİNMİYOR",
 
         alignDIRECT: "DİREKT",
@@ -138,7 +150,17 @@ const i18n = {
         connError: "BAĞLANTI HATASI",
         connErrorDesc: "Sunucuya ulaşılamıyor. FastAPI'nin çalıştığından emin olun.",
         latText: "Enlem",
-        lonText: "Boylam"
+        lonText: "Boylam",
+        lblNow: "ŞU AN (Kp):",
+        lblFuture: "TAHMİN (ASA):",
+        
+        impSat: "Uydular", impGrid: "Elektrik Şb.", impRadio: "İletişim (HF)", impGps: "Navigasyon",
+        impact_sat_SAFE: "Optimal koşullar", impact_grid_SAFE: "Etki gözlenmedi", impact_radio_SAFE: "Bantlar stabil", impact_gps_SAFE: "Hassasiyet normal",
+        impact_sat_LOW: "Hafif sürtünme", impact_grid_LOW: "Etki gözlenmedi", impact_radio_LOW: "Hafif sinyal kaybı", impact_gps_LOW: "Hassasiyet normal",
+        impact_sat_MEDIUM: "Sürtünme uyarısı", impact_grid_MEDIUM: "Dalgalanmalar bşld.", impact_radio_MEDIUM: "Kutuplarda kesinti", impact_gps_MEDIUM: "Metrelik sapmalar",
+        impact_sat_HIGH: "Şarj riski yüksek", impact_grid_HIGH: "Voltaj alarmları", impact_radio_HIGH: "Radyo kararması (HF)", impact_gps_HIGH: "Onlarca metre sapma",
+        impact_sat_CRITICAL: "Güvenli mod şart", impact_grid_CRITICAL: "Şebeke çökme riski", impact_radio_CRITICAL: "Küresel HF kesintisi", impact_gps_CRITICAL: "Sinyal kaybı uyarısı",
+        impact_sat_EXTREME: "KORUMA PROSEDÜRÜ", impact_grid_EXTREME: "TAM ÇÖKÜŞ SENARYOSU", impact_radio_EXTREME: "KÜRESEL BLACKOUT", impact_gps_EXTREME: "TÜM SİNYALLER KOPUK",
     }
 };
 
@@ -256,18 +278,45 @@ function updateDashboard(data) {
     
     const classMap = {
         "SAFE": "level-safe", "LOW": "level-low", "MEDIUM": "level-medium",
-        "HIGH": "level-high", "CRITICAL": "level-critical", "UNKNOWN": "level-unknown"
+        "HIGH": "level-high", "CRITICAL": "level-critical", "EXTREME": "level-extreme", "UNKNOWN": "level-unknown"
     };
 
     threatLevelEl.className = `threat-level ${classMap[newTarget] || 'level-unknown'}`;
     threatDescEl.innerText = `${t('determiner')}: ${data.determiner || '—'} | ${t('lastUpdate')}: ${data.timestamp}`;
 
     // Alert Modal Logic
-    if (["HIGH", "CRITICAL"].includes(newTarget) && newTarget !== currentThreatLevel && currentThreatLevel !== null) {
+    if (["HIGH", "CRITICAL", "EXTREME"].includes(newTarget) && newTarget !== currentThreatLevel && currentThreatLevel !== null) {
         alertMsg.innerText = t("alertMsgFull").replace("{LEVEL}", localizedLevel);
         modal.classList.remove("hidden");
     }
     currentThreatLevel = newTarget;
+
+    // Infrastructure Impact Logic
+    const impactColorMap = {
+        "SAFE": "val-safe", "LOW": "val-low", "MEDIUM": "val-medium",
+        "HIGH": "val-high", "CRITICAL": "val-critical", "EXTREME": "val-extreme", "UNKNOWN": "val-safe"
+    };
+    const nowLevel = (data.kp && data.kp.level) ? data.kp.level : "SAFE";
+    const futureLevel = data.final_level || "SAFE";
+
+    ["sat", "grid", "radio", "gps"].forEach(sys => {
+        const cardEl = document.getElementById(`impact-${sys}`);
+        const nowSpan = document.getElementById(`text-${sys}-now`);
+        const futureSpan = document.getElementById(`text-${sys}-future`);
+        
+        if (cardEl) {
+             // Card overall class follows futureLevel for border/bg highlight
+             cardEl.className = `impact-card impact-${futureLevel.toLowerCase()}`;
+        }
+        if (nowSpan) {
+            nowSpan.innerText = t(`impact_${sys}_${nowLevel}`) || t("unknown");
+            nowSpan.className = `desc-val ${impactColorMap[nowLevel]}`;
+        }
+        if (futureSpan) {
+            futureSpan.innerText = t(`impact_${sys}_${futureLevel}`) || t("unknown");
+            futureSpan.className = `desc-val ${impactColorMap[futureLevel]}`;
+        }
+    });
 
     // 2. NOAA Live Data Panel
     const noaa = data.noaa || {};
@@ -547,17 +596,17 @@ function spawnShootingStar(container) {
 // CME Details
 const colorMap = {
     "SAFE": "var(--accent-safe)", "LOW": "var(--accent-low)", "MEDIUM": "var(--accent-mid)",
-    "HIGH": "var(--accent-high)", "CRITICAL": "var(--accent-crit)", "UNKNOWN": "var(--accent-unknown)"
+    "HIGH": "var(--accent-high)", "CRITICAL": "var(--accent-crit)", "EXTREME": "var(--accent-extreme)", "UNKNOWN": "var(--accent-unknown)"
 };
 
 const markerContrastMap = {
     "SAFE": "#22c55e", "LOW": "#3b82f6", "MEDIUM": "#a855f7",
-    "HIGH": "#000000", "CRITICAL": "#ffffff", "UNKNOWN": "#64748b"
+    "HIGH": "#000000", "CRITICAL": "#ffffff", "EXTREME": "#000000", "UNKNOWN": "#64748b"
 };
 
 function positionMarker(marker, lat, lon, level) {
     marker.style.backgroundColor = markerContrastMap[level] || markerContrastMap["UNKNOWN"];
-    marker.style.border = level === "CRITICAL" ? "3px solid #ef4444" : "3px solid #ffffff";
+    marker.style.border = (level === "CRITICAL" || level === "EXTREME") ? "3px solid #ef4444" : "3px solid #ffffff";
     marker.style.boxShadow = "0 0 15px rgba(0,0,0,0.9)";
     if (!isNaN(lon) && !isNaN(lat)) {
         let top = 50 - (lat / 90) * 50;

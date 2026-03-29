@@ -282,7 +282,7 @@ def check_tier3(db: Session, noaa_data: dict):
 
 # ─────────────────────────────────────────────
 #  TIER 4: ACTIVE STORM — Geomagnetic storm
-#  Triggers: Kp ≥ 5 (G1+) or final_level HIGH/CRITICAL
+#  Triggers: Kp >= 5 (G1+) or final_level HIGH/CRITICAL/EXTREME
 #  Timing: Storm is happening NOW
 # ─────────────────────────────────────────────
 
@@ -302,8 +302,8 @@ def check_tier4(db: Session, kp_data: dict, final_level: str):
     kp = kp_data.get("kp_value", 0)
     kp_level = kp_data.get("level", "SAFE")
 
-    # Only trigger for Kp ≥ 5 OR final weighted level is HIGH/CRITICAL
-    should_alert = (kp >= 5) or (final_level in ("HIGH", "CRITICAL"))
+    # Only trigger for Kp >= 5 OR final weighted level is HIGH/CRITICAL/EXTREME
+    should_alert = (kp >= 5) or (final_level in ("HIGH", "CRITICAL", "EXTREME"))
 
     if not should_alert:
         return
