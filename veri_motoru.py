@@ -205,7 +205,7 @@ def analyze_kp_index() -> dict:
                 level = "CRITICAL"
             elif kp >= 5:
                 level = "HIGH"
-            elif kp == 4:
+            elif kp >= 4:
                 level = "MEDIUM"
             elif kp >= 3:
                 level = "LOW"
