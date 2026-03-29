@@ -19,6 +19,7 @@ from database import NotificationLog
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+WEB_URL = "https://asa-space-weather.vercel.app" # Örnek web adresi
 
 TSI = timezone(timedelta(hours=3))
 
@@ -51,6 +52,51 @@ def send_telegram(text: str) -> bool:
     except Exception as e:
         print(f"[Telegram] ❌ Exception: {e}")
         return False
+
+
+def send_start_screen(chat_id: int):
+    """Sends a simplified welcome message to a user who typed /start."""
+    if not TELEGRAM_TOKEN:
+        return
+
+    msg = (
+        f"🛰️ <b>ASA — Uzay Hava Durumu Bilgi Servisi</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Güneş fırtınaları (CME), jeomanyetik sapmalar ve potansiyel riskler için aktif izleme sistemine hoş geldiniz.\n"
+        f"\n"
+        f"Sistemimiz Dünya'yı etkileyebilecek her türlü uzay hava durumu olayını 7/24 takip eder ve kritik bir durum tespit edildiğinde sizi **anında bu hat üzerinden** bilgilendirir.\n"
+        f"\n"
+        f"📢 <b>Neler Alacaksınız?</b>\n"
+        f"• Erken uyarılar (1-4 gün öncesinden)\n"
+        f"• Acil durum bildirimleri (30-60 dakika öncesinden)\n"
+        f"• Aktif fırtına güncellemeleri\n"
+        f"\n"
+        f"Herhangi bir işlem yapmanıza gerek yoktur. Bir tehdit durumunda bildirim alacaksınız."
+    )
+
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        requests.post(url, json={
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML"
+        }, timeout=10)
+    except Exception as e:
+        print(f"[Telegram Bot] Error sending start screen: {e}")
+
+
+def get_bot_updates(offset: int = 0):
+    """Fetch recent updates from Telegram API."""
+    if not TELEGRAM_TOKEN:
+        return []
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+        resp = requests.get(url, params={"offset": offset, "timeout": 30}, timeout=35)
+        if resp.status_code == 200:
+            return resp.json().get("result", [])
+    except Exception as e:
+        print(f"[Telegram Bot] Polling error: {e}")
+    return []
 
 
 def was_already_sent(db: Session, event_id: str, tier: int, cooldown_hours: int = 6) -> bool:

@@ -40,7 +40,7 @@ from database import (
     KpIndex, SolarFlare, NotificationLog
 )
 from veri_motoru import full_analysis, LEVEL_ORDER
-from notifications import check_all_notifications
+from notifications import check_all_notifications, get_bot_updates, send_start_screen
 
 # ── Connection Manager (WebSocket) ──────────────────────
 class ConnectionManager:
@@ -102,6 +102,42 @@ async def periodic_scan():
             traceback.print_exc()
 
         await asyncio.sleep(600)  # 10 minutes
+
+
+async def telegram_bot_task():
+    """Background task to poll Telegram for new messages ($/start, etc)."""
+    offset = 0
+    print("[Telegram Bot] Polling started...")
+    while True:
+        try:
+            updates = await asyncio.to_thread(get_bot_updates, offset)
+            for update in updates:
+                offset = update["update_id"] + 1
+                
+                # Handle /start command
+                if "message" in update and "text" in update["message"]:
+                    msg = update["message"]
+                    text = msg.get("text", "")
+                    chat_id = msg["chat"]["id"]
+                    
+                    if text.startswith("/start"):
+                        print(f"[Telegram Bot] Received /start from {chat_id}")
+                        await asyncio.to_thread(send_start_screen, chat_id)
+                
+                # Handle button clicks (callback queries)
+                elif "callback_query" in update:
+                    cb = update["callback_query"]
+                    chat_id = cb["message"]["chat"]["id"]
+                    data = cb.get("data")
+                    
+                    # Placeholder for button logic
+                    # You could send status, levels, etc. here
+                    print(f"[Telegram Bot] Received callback {data} from {chat_id}")
+
+        except Exception as e:
+            print(f"[Telegram Bot Error] {e}")
+
+        await asyncio.sleep(2)  # Check every 2 seconds
 
 
 def _save_to_db(db: Session, result: dict):
@@ -194,8 +230,10 @@ async def lifespan(app: FastAPI):
         print(f"[Startup Scan Error] {e}")
         traceback.print_exc()
     task = asyncio.create_task(periodic_scan())
+    bot_task = asyncio.create_task(telegram_bot_task())
     yield
     task.cancel()
+    bot_task.cancel()
 
 
 # ── FastAPI App ────────────────────────────────────
