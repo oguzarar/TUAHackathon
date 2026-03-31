@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="appTitle">Solar Storm Early Warning System (ASA)</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="starfield" id="starfield"></div>
+    <div class="nebula-overlay"></div>
+
+    <header>
+        <div class="logo-area">
+            <i class="fa-solid fa-satellite-dish logo-icon"></i>
+            <h1 data-i18n="appTitle">ASA Space Weather</h1>
+        </div>
+        <div class="header-right">
+            <div class="lang-toggle">
+                <button id="lang-en" class="lang-btn active">EN</button>
+                <button id="lang-tr" class="lang-btn">TR</button>
+            </div>
+            <div class="time-widget">
+                <i class="fa-regular fa-clock"></i> <span id="current-time" data-i18n="loading">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Main Threat Banner -->
+        <section id="threat-banner" class="glass-panel threat-banner loading">
+            <h2 class="threat-title" data-i18n="finalThreat">Final Threat Level</h2>
+            <div class="threat-level" id="final-level" data-i18n="loading">LOADING</div>
+            <p class="threat-desc" id="threat-determiner" data-i18n="systemStarting">System Starting...</p>
+            
+            <!-- Infrastructure Impact Section -->
+            <div class="infrastructure-impacts">
+                <div class="impact-card" id="impact-sat">
+                    <div class="impact-icon"><i class="fa-solid fa-satellite"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impSat">Satellites</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-sat-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-sat-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-grid">
+                    <div class="impact-icon"><i class="fa-solid fa-plug-circle-bolt"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impGrid">Power Grid</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-grid-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-grid-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-radio">
+                    <div class="impact-icon"><i class="fa-solid fa-tower-cell"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impRadio">Comms (HF)</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-radio-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-radio-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="impact-card" id="impact-gps">
+                    <div class="impact-icon"><i class="fa-solid fa-location-crosshairs"></i></div>
+                    <div class="impact-content">
+                        <div class="impact-title" data-i18n="impGps">Navigation</div>
+                        <div class="impact-times">
+                            <div class="impact-row"><span class="time-label" data-i18n="lblNow">NOW (Kp):</span> <span class="desc-val" id="text-gps-now" data-i18n="evaluating">Evaluating...</span></div>
+                            <div class="impact-row"><span class="time-label" data-i18n="lblFuture">PREDICTED (ASA):</span> <span class="desc-val" id="text-gps-future" data-i18n="evaluating">Evaluating...</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Data (NOAA) -->
+        <section class="data-grid">
+            <div class="glass-panel data-card">
+                <div class="card-icon"><i class="fa-solid fa-magnet"></i></div>
+                <div class="card-content">
+                    <h3 data-i18n="magField">Magnetic Field (Bz)</h3>
+                    <div class="value"><span id="bz-value">--</span> <span class="unit">nT</span></div>
+                    <p class="desc" data-i18n="solarOrientation">Solar Wind Orientation</p>
+                </div>
+            </div>
+
+            <div class="glass-panel data-card">
+                <div class="card-icon"><i class="fa-solid fa-wind"></i></div>
+                <div class="card-content">
+                    <h3 data-i18n="windSpeed">Wind Speed</h3>
+                    <div class="value"><span id="wind-speed">--</span> <span class="unit">km/s</span></div>
+                    <p class="desc" data-i18n="earthVelocity">Earth Approach Velocity</p>
+                </div>
+            </div>
+
+            <div class="glass-panel data-card">
+                <div class="card-icon"><i class="fa-solid fa-water"></i></div>
+                <div class="card-content">
+                    <h3 data-i18n="plasmaDensity">Plasma Density</h3>
+                    <div class="value"><span id="density">--</span> <span class="unit">p/cm³</span></div>
+                    <p class="desc" data-i18n="particleCount">Particle Count</p>
+                </div>
+            </div>
+
+            <div class="glass-panel data-card">
+                <div class="card-icon"><i class="fa-solid fa-stopwatch"></i></div>
+                <div class="card-content">
+                    <h3 data-i18n="l1Delay">L1 Delay</h3>
+                    <div class="value"><span id="l1-delay">--</span></div>
+                    <p class="desc" data-i18n="timeToReach">Time to reach Earth</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="main-columns">
+            <!-- Left Column: Chart Panel -->
+            <section class="glass-panel chart-panel" style="display: flex; flex-direction: column; height: 100%;">
+                <div class="panel-header" style="flex-shrink: 0;">
+                    <h3><i class="fa-solid fa-chart-line"></i> <span data-i18n="chartTitle">24h Bz and Speed History</span></h3>
+                    <div class="badge noaa-badge">NOAA DSCOVR</div>
+                </div>
+                <div class="chart-container" style="flex-grow: 1; height: 0; min-height: 480px;">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Middle Column: Kp & Flares -->
+            <div style="display: flex; flex-direction: column; gap: 20px; height: 100%; min-height: 0;">
+                <!-- NOAA Kp Panel -->
+                <section class="glass-panel kp-panel">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-globe"></i> <span data-i18n="kpTitle">Geomagnetic Kp-Index</span></h3>
+                        <div class="badge noaa-badge">NOAA SWPC</div>
+                    </div>
+                    <div class="kp-gauge-container">
+                        <div class="kp-meter" id="kp-meter-bg">
+                            <div class="kp-value-large" id="kp-display">--</div>
+                            <div class="kp-scale"></div>
+                        </div>
+                        <div class="kp-status-text" id="kp-status-text" data-i18n="loading">Loading...</div>
+                    </div>
+                </section>
+                
+                <!-- NASA Flares Panel -->
+                <section class="glass-panel flr-panel" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+                    <div class="panel-header" style="flex-shrink: 0;">
+                        <h3><i class="fa-solid fa-sun" style="color:var(--accent-mid)"></i> <span data-i18n="flareTitle">Solar Flares (Last 72h)</span></h3>
+                        <div class="badge nasa-badge">NASA DONKI</div>
+                    </div>
+                    <div class="flr-list" id="flr-list" style="flex-grow: 1; flex-basis: 0; min-height: 0; overflow-y: auto;">
+                        <p class="loading-text" data-i18n="checkingData">Checking Data...</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: NASA CME Panel -->
+            <section class="glass-panel cme-panel" style="display: flex; flex-direction: column; height: 100%; min-height: 0;">
+                <div class="panel-header" style="flex-shrink: 0;">
+                    <h3><i class="fa-solid fa-meteor"></i> <span data-i18n="cmeTitle">Detected CMEs (Last 72h)</span></h3>
+                    <div class="badge nasa-badge">NASA DONKI</div>
+                </div>
+                <div class="cme-list" id="cme-list" style="flex-grow: 1; flex-basis: 0; min-height: 0; overflow-y: auto;">
+                    <p class="loading-text" data-i18n="checkingData">Checking CME Data...</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Modal for notifications -->
+    <div id="alert-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <i class="fa-solid fa-triangle-exclamation modal-icon"></i>
+            <h2 data-i18n="alertTitle">NEW THREAT LEVEL DETECTED</h2>
+            <p id="alert-msg">Level escalated!</p>
+            <button id="close-modal" data-i18n="acknowledge">Acknowledge</button>
+        </div>
+    </div>
+
+    <!-- CME Details Modal -->
+    <div id="cme-detail-modal" class="modal hidden cme-detail-modal">
+        <div class="modal-content glass-panel large-modal">
+            <button id="close-cme-modal" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="cme-detail-title" data-i18n="cmeDetailsTitle">CME Details</h2>
+            
+            <div class="cme-detail-layout">
+                <!-- Left Sun Visualizer -->
+                <div class="sun-visual-panel">
+                    <h3 data-i18n="solarSource">Solar Source Location</h3>
+                    <div class="sun-container">
+                        <div id="cme-marker" class="cme-marker">
+                            <div class="marker-pulse"></div>
+                        </div>
+                        <div class="sun-equator"></div>
+                        <div class="sun-meridian"></div>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 5px;" data-i18n="earthFacingDisk">* Earth-facing disk / ±90° longitude</p>
+                </div>
+
+                <!-- Right Details List -->
+                <div class="cme-info-list" id="cme-detail-info">
+                    <!-- JS populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flare Details Modal -->
+    <div id="flr-detail-modal" class="modal hidden cme-detail-modal">
+        <div class="modal-content glass-panel large-modal">
+            <button id="close-flr-modal" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+            <h2 id="flr-detail-title" data-i18n="flareDetailsTitle">Flare Details</h2>
+            <div class="cme-detail-layout">
+                <!-- Left Sun Visualizer -->
+                <div class="sun-visual-panel">
+                    <h3 data-i18n="solarSource">Solar Source Location</h3>
+                    <div class="sun-container">
+                        <div id="flr-marker" class="cme-marker">
+                            <div class="marker-pulse"></div>
+                        </div>
+                        <div class="sun-equator"></div>
+                        <div class="sun-meridian"></div>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 5px;" data-i18n="earthFacingDisk">* Earth-facing disk / ±90° longitude</p>
+                </div>
+
+                <!-- Right Details List -->
+                <div class="cme-info-list" id="flr-detail-info">
+                    <!-- JS populated -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
